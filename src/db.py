@@ -64,6 +64,9 @@ class Game(Base):
     home_score: Mapped[int | None] = mapped_column()
     away_score: Mapped[int | None] = mapped_column()
     status: Mapped[str | None] = mapped_column(String)  # scheduled / final / postponed
+    stadium_id: Mapped[str | None] = mapped_column(String)
+    home_manager_id: Mapped[str | None] = mapped_column(String)
+    away_manager_id: Mapped[str | None] = mapped_column(String)
 
     home_team: Mapped["Team"] = relationship(foreign_keys=[home_team_id])
     away_team: Mapped["Team"] = relationship(foreign_keys=[away_team_id])

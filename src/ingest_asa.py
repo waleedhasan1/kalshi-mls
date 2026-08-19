@@ -84,6 +84,9 @@ def ingest_games(asa: AmericanSoccerAnalysis, config: dict) -> pd.DataFrame:
                 "home_score": int(g["home_score"]) if not pd.isna(g["home_score"]) else None,
                 "away_score": int(g["away_score"]) if not pd.isna(g["away_score"]) else None,
                 "status": _nan_to_none(g.get("status")),
+                "stadium_id": _nan_to_none(g.get("stadium_id")),
+                "home_manager_id": _nan_to_none(g.get("home_manager_id")),
+                "away_manager_id": _nan_to_none(g.get("away_manager_id")),
             }
             stmt = sqlite_insert(Game).values(**row)
             stmt = stmt.on_conflict_do_update(index_elements=["game_id"], set_=row)
