@@ -172,6 +172,7 @@ class Feature(Base):
     away_goals_added_roll: Mapped[float | None] = mapped_column(Float)
     home_elo: Mapped[float | None] = mapped_column(Float)
     away_elo: Mapped[float | None] = mapped_column(Float)
+    home_venue_advantage: Mapped[float | None] = mapped_column(Float)
     home_xg_overperf_roll: Mapped[float | None] = mapped_column(Float)
     away_xg_overperf_roll: Mapped[float | None] = mapped_column(Float)
 

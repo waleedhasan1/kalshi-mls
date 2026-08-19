@@ -292,16 +292,19 @@ def fetch_weather(games: pd.DataFrame, teams: pd.DataFrame, config: dict) -> pd.
         start, end = sub["date"].min().date(), min(sub["date"].max().date(), dt.date.today() - dt.timedelta(days=2))
         if start > end:
             continue
-        r = httpx.get(
-            "https://archive-api.open-meteo.com/v1/archive",
-            params={
-                "latitude": lat, "longitude": lon,
-                "start_date": start.isoformat(), "end_date": end.isoformat(),
-                "daily": "temperature_2m_mean,precipitation_sum,wind_speed_10m_max",
-                "timezone": "UTC",
-            },
-            timeout=30,
-        )
+        try:
+            r = httpx.get(
+                "https://archive-api.open-meteo.com/v1/archive",
+                params={
+                    "latitude": lat, "longitude": lon,
+                    "start_date": start.isoformat(), "end_date": end.isoformat(),
+                    "daily": "temperature_2m_mean,precipitation_sum,wind_speed_10m_max",
+                    "timezone": "UTC",
+                },
+                timeout=httpx.Timeout(30, connect=15),
+            )
+        except httpx.HTTPError:
+            continue
         if r.status_code != 200:
             continue
         d = r.json().get("daily", {})
@@ -452,7 +455,7 @@ def compute_targets(games: pd.DataFrame) -> pd.DataFrame:
 
 FEATURE_COLUMNS = [
     "home_xg_roll", "away_xg_roll", "home_xga_roll", "away_xga_roll",
-    "home_goals_added_roll", "away_goals_added_roll", "home_elo", "away_elo",
+    "home_goals_added_roll", "away_goals_added_roll", "home_elo", "away_elo", "home_venue_advantage",
     "home_xg_overperf_roll", "away_xg_overperf_roll",
     "home_availability_loss", "away_availability_loss",
     "home_attack_availability_loss", "away_attack_availability_loss",
@@ -520,6 +523,37 @@ def persist_features(games: pd.DataFrame, config: dict | None = None) -> int:
             n += 1
         session.commit()
     return n
+
+
+MODEL_FEATURE_COLUMNS = [
+    "home_elo", "away_elo",
+    "home_xg_roll", "away_xg_roll", "home_xga_roll", "away_xga_roll",
+    "home_xg_overperf_roll", "away_xg_overperf_roll",
+    "home_goals_added_roll", "away_goals_added_roll",
+    "rest_days_diff", "away_travel_km", "away_timezone_change_hours",
+    "home_venue_advantage",
+    "home_matches_since_manager_change", "away_matches_since_manager_change",
+]
+
+
+def load_model_dataset(config: dict | None = None) -> pd.DataFrame:
+    """Features joined to game date/season, scoped to `asa.player_stats_seasons`
+    (the window where goals-added and weather are populated), sorted
+    chronologically, and complete-case filtered on the model's feature set.
+    """
+    config = config or load_config()
+    engine = get_engine(config)
+    seasons = config["asa"]["player_stats_seasons"]
+    placeholders = ",".join(f"'{s}'" for s in seasons)
+    query = f"""
+        SELECT f.*, g.date, g.season
+        FROM features f JOIN games g ON g.game_id = f.game_id
+        WHERE g.season IN ({placeholders}) AND f.result IS NOT NULL
+        ORDER BY g.date
+    """
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn, parse_dates=["date"])
+    return df.dropna(subset=MODEL_FEATURE_COLUMNS + ["goal_diff", "result"]).reset_index(drop=True)
 
 
 def main():
