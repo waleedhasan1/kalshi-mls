@@ -378,6 +378,12 @@ def compute_injury_features(games: pd.DataFrame, engine) -> pd.DataFrame:
 
 
 def compute_market_features(games: pd.DataFrame, engine) -> pd.DataFrame:
+    """PLAN §7.4: backtest against *closing* prices, i.e. the price right
+    before kickoff — not the market's own `close_time`, which stays open for
+    days after the final whistle for settlement and would leak the result
+    (post-match prices collapse toward $0.99/$0.01). Every candlestick used
+    here is therefore filtered to `ts <= game kickoff time` first.
+    """
     with get_session(engine) as session:
         markets = session.execute(select(KalshiMarket).where(KalshiMarket.resolved_game_id.isnot(None))).scalars().all()
 
@@ -391,11 +397,22 @@ def compute_market_features(games: pd.DataFrame, engine) -> pd.DataFrame:
     if not markets:
         return games
 
+    kickoff_by_game = games.set_index("game_id")["date"]
+
     with get_session(engine) as session:
         for m in markets:
-            prices = session.execute(
+            kickoff = kickoff_by_game.get(m.resolved_game_id)
+            if kickoff is None or pd.isna(kickoff):
+                continue
+            # both `kickoff` and stored `ts` values are naive UTC (SQLite drops
+            # tzinfo on round-trip) -- keep the comparison naive-to-naive
+            kickoff = kickoff.to_pydatetime() if hasattr(kickoff, "to_pydatetime") else kickoff
+            kickoff = kickoff.replace(tzinfo=None)
+
+            all_prices = session.execute(
                 select(KalshiPrice).where(KalshiPrice.ticker == m.ticker).order_by(KalshiPrice.ts)
             ).scalars().all()
+            prices = [p for p in all_prices if p.ts <= kickoff]
             if not prices:
                 continue
             last = prices[-1]
@@ -406,6 +423,10 @@ def compute_market_features(games: pd.DataFrame, engine) -> pd.DataFrame:
             )
             if closing_prob is None:
                 continue
+
+            games.loc[games["game_id"] == m.resolved_game_id, "kalshi_hours_to_close"] = (
+                kickoff - last.ts
+            ).total_seconds() / 3600
 
             cutoff = last.ts - dt.timedelta(hours=72)
             earlier = [p for p in prices if p.ts <= cutoff]
@@ -431,7 +452,6 @@ def compute_market_features(games: pd.DataFrame, engine) -> pd.DataFrame:
                 games.loc[row_mask, "kalshi_away_implied_prob"] = closing_prob
             elif m.yes_outcome == "tie":
                 games.loc[row_mask, "kalshi_tie_implied_prob"] = closing_prob
-            games.loc[row_mask, "kalshi_hours_to_close"] = 0.0
 
     return games
 
