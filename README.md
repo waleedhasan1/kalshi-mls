@@ -31,18 +31,20 @@ Run from `src/`, in order (each step reads the last one's output from
 
 ```bash
 cd src
-python3 db.py               # create the SQLite schema
-python3 ingest_kalshi.py    # Kalshi markets + hourly candlesticks
-python3 ingest_asa.py       # teams/players/games/player-match-stats
-python3 resolve_game.py     # match Kalshi events -> ASA game_ids
-python3 scrape_injuries.py  # one timestamped injury snapshot (re-run periodically)
-python3 features.py         # build the features table (PLAN §4)
-python3 train_mlr.py        # goal-differential regression
-python3 train_logistic.py   # win/draw/away multinomial logistic
-python3 calibrate.py        # isotonic/Platt calibration, picks whichever wins
-python3 evaluate.py         # EV backtest vs Kalshi closing prices
-python3 bet_sim.py          # flat vs fractional-Kelly bankroll simulation
-python3 viz.py              # all 14 figures -> reports/figures/
+python3 db.py                  # create the SQLite schema
+python3 ingest_kalshi.py       # Kalshi markets + hourly candlesticks
+python3 ingest_asa.py          # teams/players/games/player-match-stats
+python3 ingest_external_mls.py # supplementary 1996-2012 results (footballcsv, pre-ASA)
+python3 resolve_game.py        # match Kalshi events -> ASA game_ids
+python3 scrape_injuries.py     # one timestamped injury snapshot (re-run periodically)
+python3 features.py            # build the features table (PLAN §4)
+python3 train_mlr.py           # goal-differential regression, 2023-2026, full features
+python3 train_logistic.py      # win/draw/away multinomial logistic, 2023-2026, full features
+python3 train_long_history.py  # same two models refit on the full 1996-2026 history
+python3 calibrate.py           # isotonic/Platt calibration, picks whichever wins
+python3 evaluate.py            # EV backtest vs Kalshi closing prices
+python3 bet_sim.py             # flat vs fractional-Kelly bankroll simulation
+python3 viz.py                 # all figures -> reports/figures/
 ```
 
 Then open `reports/summary.ipynb` for the narrated walkthrough (or re-execute it:
@@ -50,6 +52,17 @@ Then open `reports/summary.ipynb` for the narrated walkthrough (or re-execute it
 
 ## Current state / known limits
 
+- **Two dataset scopes, on purpose.** `train_mlr.py`/`train_logistic.py` use
+  2023-2026 (1,867 games) with the full feature set, including ASA's xG and
+  goals-added. `train_long_history.py` uses 1996-2026 (9,367 games, nearly
+  double, thanks to `ingest_external_mls.py`) with a reduced, ASA-independent
+  feature set (Elo, rest-days, travel, venue-advantage only), since the older
+  games have no advanced stats. The bigger holdout (1,779 vs. 357 games) gives
+  much tighter error estimates, but the reduced feature set has noticeably
+  weaker outcome accuracy (46.9%, barely above the 46.3% plurality-class
+  baseline) — see `data/processed/long_history_comparison.csv` and
+  `reports/figures/long_history_comparison.png`. xG-based features are doing
+  real work, not just adding noise.
 - **Kalshi market history is short.** `KXMLSGAME` only has a few weeks of
   history at build time, so only ~66 of the 5,762 ASA games have a real resolved
   Kalshi price. `evaluate.py`'s backtest (n=3 model-selected bets) is not yet a
