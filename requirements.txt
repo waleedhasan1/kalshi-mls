@@ -1,0 +1,13 @@
+pandas
+numpy
+scikit-learn
+statsmodels
+itscalledsoccer
+httpx
+beautifulsoup4
+rapidfuzz
+sqlalchemy
+matplotlib
+seaborn
+PyYAML
+jupyter

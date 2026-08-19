@@ -1,0 +1,24 @@
+db:
+  path: data/mls.db
+
+kalshi:
+  base_url: https://api.elections.kalshi.com/trade-api/v2
+  mls_series_ticker: KXMLSGAME
+  rate_limit_per_sec: 6
+
+asa:
+  league: mls
+  player_stats_seasons: ["2023", "2024", "2025", "2026"]
+
+injuries:
+  source: rotowire
+  raw_html_dir: data/raw/injuries
+  scrape_delay_seconds: 3
+  user_agent: "Mozilla/5.0 (compatible; kalshi-mls-research-bot/0.1; +contact: waleed.1.hasan@gmail.com)"
+
+features:
+  rolling_window_matches: 6
+
+betting:
+  favorite_price_min_dollars: 0.60
+  kalshi_fee_rate: 0.07

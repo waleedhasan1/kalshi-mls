@@ -1,0 +1,8 @@
+.venv/
+data/mls.db
+data/raw/
+data/processed/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+reports/figures/*.png
