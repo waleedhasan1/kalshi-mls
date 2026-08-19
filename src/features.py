@@ -556,24 +556,49 @@ MODEL_FEATURE_COLUMNS = [
 ]
 
 
-def load_model_dataset(config: dict | None = None) -> pd.DataFrame:
-    """Features joined to game date/season, scoped to `asa.player_stats_seasons`
-    (the window where goals-added and weather are populated), sorted
-    chronologically, and complete-case filtered on the model's feature set.
+LONG_HISTORY_FEATURE_COLUMNS = [
+    "home_elo", "away_elo",
+    "rest_days_diff", "away_travel_km", "away_timezone_change_hours",
+    "home_venue_advantage",
+]
+"""Reduced feature set that only needs date/teams/score (Elo, rest, travel,
+venue) -- available across the full 1996-2026 history, unlike xG / goals-added
+/ weather which only exist where ASA's advanced stats are populated
+(2023-2026). See train_long_history.py."""
+
+
+def load_model_dataset(
+    config: dict | None = None,
+    feature_columns: list[str] | None = None,
+    seasons: list[str] | None = None,
+) -> pd.DataFrame:
+    """Features joined to game date/season, sorted chronologically, and
+    complete-case filtered on `feature_columns`.
+
+    Defaults to `MODEL_FEATURE_COLUMNS` scoped to `asa.player_stats_seasons`
+    (the window where goals-added and weather are populated). Pass
+    `feature_columns=LONG_HISTORY_FEATURE_COLUMNS, seasons=None` for the full
+    1996-2026 history instead (see train_long_history.py).
     """
     config = config or load_config()
     engine = get_engine(config)
-    seasons = config["asa"]["player_stats_seasons"]
-    placeholders = ",".join(f"'{s}'" for s in seasons)
+    feature_columns = feature_columns or MODEL_FEATURE_COLUMNS
+    if seasons is None and feature_columns is MODEL_FEATURE_COLUMNS:
+        seasons = config["asa"]["player_stats_seasons"]
+
+    where = "f.result IS NOT NULL"
+    if seasons:
+        placeholders = ",".join(f"'{s}'" for s in seasons)
+        where += f" AND g.season IN ({placeholders})"
     query = f"""
         SELECT f.*, g.date, g.season
         FROM features f JOIN games g ON g.game_id = f.game_id
-        WHERE g.season IN ({placeholders}) AND f.result IS NOT NULL
+        WHERE {where}
         ORDER BY g.date
     """
     with engine.connect() as conn:
         df = pd.read_sql(query, conn, parse_dates=["date"])
-    return df.dropna(subset=MODEL_FEATURE_COLUMNS + ["goal_diff", "result"]).reset_index(drop=True)
+    return df.dropna(subset=feature_columns + ["goal_diff", "result"]).reset_index(drop=True)
 
 
 def main():

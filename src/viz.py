@@ -98,19 +98,19 @@ def plot_mlr_coefficients():
     _save(fig, "mlr_coefficient_plot")
 
 
-def plot_mlr_pred_vs_actual():
-    test = pd.read_csv(PROCESSED / "mlr_test_predictions.csv")
+def plot_mlr_pred_vs_actual(prefix: str = "mlr", title_suffix: str = ""):
+    test = pd.read_csv(PROCESSED / f"{prefix}_test_predictions.csv")
     fig, ax = plt.subplots(figsize=(6.5, 6.5))
     ax.scatter(test["goal_diff"], test["pred_goal_diff"], alpha=0.45, s=18)
     lims = [min(test["goal_diff"].min(), test["pred_goal_diff"].min()) - 0.5,
             max(test["goal_diff"].max(), test["pred_goal_diff"].max()) + 0.5]
     ax.plot(lims, lims, color="crimson", lw=1, label="perfect prediction")
-    ax.set_xlabel("Actual goal differential (holdout)")
+    ax.set_xlabel(f"Actual goal differential (holdout, n={len(test)})")
     ax.set_ylabel("Predicted goal differential")
-    ax.set_title("MLR: predicted vs actual (holdout)")
+    ax.set_title(f"MLR: predicted vs actual (holdout){title_suffix}")
     ax.legend()
     fig.tight_layout()
-    _save(fig, "mlr_pred_vs_actual")
+    _save(fig, f"{prefix}_pred_vs_actual")
 
 
 def plot_mlr_corr_vif():
@@ -189,16 +189,59 @@ def plot_roc_curves():
     _save(fig, "logistic_roc_curves")
 
 
-def plot_confusion_matrix():
-    cm = np.loadtxt(PROCESSED / "logistic_confusion_matrix.csv", delimiter=",")
+def plot_confusion_matrix(prefix: str = "logistic", title_suffix: str = ""):
+    cm = np.loadtxt(PROCESSED / f"{prefix}_confusion_matrix.csv", delimiter=",")
     labels = ["away", "draw", "home"]
     fig, ax = plt.subplots(figsize=(6, 5.5))
     sns.heatmap(cm, annot=True, fmt=".0f", cmap="Blues", xticklabels=labels, yticklabels=labels, ax=ax)
     ax.set_xlabel("Predicted")
     ax.set_ylabel("Actual")
-    ax.set_title("Confusion matrix (holdout)")
+    ax.set_title(f"Confusion matrix (holdout, n={int(cm.sum())}){title_suffix}")
     fig.tight_layout()
-    _save(fig, "logistic_confusion_matrix")
+    _save(fig, f"{prefix}_confusion_matrix")
+
+
+def plot_long_history_comparison():
+    path = PROCESSED / "long_history_comparison.csv"
+    if not path.exists():
+        print("skip long-history comparison: run train_long_history.py first")
+        return
+    comp = pd.read_csv(path, index_col=0)
+    cols = comp.columns.tolist()
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    ax = axes[0]
+    vals = [comp.loc["logit_accuracy", c] for c in cols]
+    base = [comp.loc["logit_baseline_accuracy", c] for c in cols]
+    x = np.arange(len(cols))
+    ax.bar(x - 0.18, vals, width=0.36, label="model accuracy", color="steelblue")
+    ax.bar(x + 0.18, base, width=0.36, label="plurality-class baseline", color="lightgrey")
+    ax.set_xticks(x); ax.set_xticklabels(cols, rotation=12, ha="right", fontsize=9)
+    ax.set_ylabel("Holdout accuracy")
+    ax.set_title("Outcome accuracy vs. baseline")
+    ax.legend(fontsize=8)
+
+    ax = axes[1]
+    rmse = [comp.loc["mlr_rmse", c] for c in cols]
+    mae = [comp.loc["mlr_mae", c] for c in cols]
+    ax.bar(x - 0.18, rmse, width=0.36, label="RMSE", color="darkorange")
+    ax.bar(x + 0.18, mae, width=0.36, label="MAE", color="seagreen")
+    ax.set_xticks(x); ax.set_xticklabels(cols, rotation=12, ha="right", fontsize=9)
+    ax.set_ylabel("Goals")
+    ax.set_title("Goal-differential error")
+    ax.legend(fontsize=8)
+
+    ax = axes[2]
+    n = [comp.loc["n_test", c] for c in cols]
+    ax.bar(x, n, color="slateblue")
+    ax.set_xticks(x); ax.set_xticklabels(cols, rotation=12, ha="right", fontsize=9)
+    ax.set_ylabel("Holdout games")
+    ax.set_title("Test-set size")
+
+    fig.suptitle("2023-2026 full-feature model vs. 1996-2026 long-history model", y=1.03)
+    fig.tight_layout()
+    _save(fig, "long_history_comparison")
 
 
 def plot_reliability_curve():
@@ -378,6 +421,10 @@ def main():
     plot_bankroll_curve()
     plot_drawdown()
     plot_bet_distribution()
+
+    plot_mlr_pred_vs_actual(prefix="mlr_longhist", title_suffix=" — 1996-2026, long-history features")
+    plot_confusion_matrix(prefix="logistic_longhist", title_suffix=" — 1996-2026, long-history features")
+    plot_long_history_comparison()
 
 
 if __name__ == "__main__":
