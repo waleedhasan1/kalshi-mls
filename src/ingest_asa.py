@@ -20,6 +20,13 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from db import Game, Player, PlayerMatchStat, Team, get_engine, get_session, init_db, load_config
 
+# ASA's `get_stadia` doesn't yet have lat/lon for every venue (e.g. newer
+# stadiums). Manual fallback for cases that matter for live features
+# (travel distance) -- verified against public stadium listings.
+STADIUM_COORD_OVERRIDES: dict[str, tuple[float, float]] = {
+    "Oa5wKXY514": (32.7831, -117.1195),  # Snapdragon Stadium (San Diego FC)
+}
+
 
 def _retry(fn, *args, attempts: int = 4, **kwargs):
     for attempt in range(attempts):
@@ -62,6 +69,8 @@ def ingest_teams_and_stadia(asa: AmericanSoccerAnalysis, config: dict) -> None:
                 "stadium_lat": _nan_to_none(stadium["latitude"]) if stadium is not None else None,
                 "stadium_lon": _nan_to_none(stadium["longitude"]) if stadium is not None else None,
             }
+            if row["stadium_lat"] is None and stadium_id in STADIUM_COORD_OVERRIDES:
+                row["stadium_lat"], row["stadium_lon"] = STADIUM_COORD_OVERRIDES[stadium_id]
             stmt = sqlite_insert(Team).values(**row)
             stmt = stmt.on_conflict_do_update(index_elements=["team_id"], set_=row)
             session.execute(stmt)
